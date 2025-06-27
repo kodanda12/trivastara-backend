@@ -1,0 +1,52 @@
+const express = require('express');
+const http = require('http');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const { Server } = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] },
+});
+
+let users = [];
+let posts = [];
+
+app.use(cors());
+app.use(bodyParser.json());
+
+app.post('/api/signup', (req, res) => {
+  const { email, name, course, year } = req.body;
+  if (!email.endsWith('.edu'))
+    return res.status(400).json({ error: 'Use a .edu email only' });
+  const exists = users.find((u) => u.email === email);
+  if (exists) return res.status(400).json({ error: 'User already exists' });
+  users.push({ email, name, course, year });
+  res.json({ success: true });
+});
+
+app.get('/api/posts', (req, res) => {
+  res.json(posts);
+});
+
+app.post('/api/posts', (req, res) => {
+  const { email, content } = req.body;
+  if (!content || !email) return res.status(400).json({ error: 'Missing data' });
+  const user = users.find((u) => u.email === email);
+  if (!user) return res.status(400).json({ error: 'User not found' });
+  const newPost = {
+    content,
+    author: user.name,
+    timestamp: new Date().toLocaleString(),
+  };
+  posts.unshift(newPost);
+  io.emit('new_post', newPost);
+  res.json(newPost);
+});
+
+io.on('connection', (socket) => {
+  console.log('New user connected');
+});
+
+server.listen(5000, () => console.log('Server running on http://localhost:5000'));
